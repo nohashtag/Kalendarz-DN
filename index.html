@@ -4,258 +4,312 @@
   <meta charset="UTF-8">
   <title>Kalendarz Działu PRO</title>
 
-  <!-- FullCalendar -->
+  <!-- FullCalendar CSS + JS -->
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
 
   <!-- Firebase -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-    // 🔐 TU WSTAW SWOJE DANE Z FIREBASE
-    const firebaseConfig = {
-      apiKey: "AIzaSyBLRK0uEOgfvAFF7nHRMPDRNaq9ZBXJd4c",
-      authDomain: "kalendarz-6d32c.firebaseapp.com",
-      projectId: "kalendarz-6d32c",
-    };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-
-  const buyers = ["AGMA","ANKO","BAFU","BEGO","DAGO","EWKO","IZSI","JAKA","JASZ","JEJA","JOKA","JOMA PAKO","JONO","KACI","KADR","KRSM","MABE","MAKA","MAPO","MASK","MASS","MISK","PAJA DONO","RABI","SAŁU","TOWO","WABU","WEKA","ZBMA","ZUWO MISK"];
-
-  const palette = ['#60a5fa','#34d399','#fbbf24','#f87171','#a78bfa','#fb7185','#22d3ee','#c084fc','#4ade80','#facc15','#38bdf8','#f472b6'];
-  const buyerColors = {};
-  buyers.forEach((b,i)=> buyerColors[b]=palette[i%palette.length]);
-
-  let events = [];
-  let calendar;
-  let editingId = null;
-  let currentType = 'Urlop';
-  let selectedBuyers = new Set();
-
-  async function loadEvents() {
-    try {
-      const snapshot = await getDocs(collection(db, "events"));
-      events = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      renderAll();
-    } catch (e) {
-      console.error("Firebase error:", e);
-    }
-  }
-
-  async function saveEvent(event) {
-    if (editingId) {
-      await updateDoc(doc(db, "events", editingId), event);
-    } else {
-      await addDoc(collection(db, "events"), event);
-    }
-    editingId = null;
-    loadEvents();
-  }
-
-  async function deleteEvent(id) {
-    await deleteDoc(doc(db, "events", id));
-    loadEvents();
-  }
-
-  function populateLegend() {
-    const legend = document.getElementById('legend');
-    legend.innerHTML = '';
-
-    buyers.forEach(b => {
-      const item = document.createElement('div');
-      item.className = 'legend-item';
-      item.innerHTML = `<div class="legend-color" style="background:${buyerColors[b]}"></div>${b}`;
-
-      item.onclick = () => {
-        selectedBuyers.has(b) ? selectedBuyers.delete(b) : selectedBuyers.add(b);
-        item.classList.toggle('active');
-        renderAll();
-      };
-
-      legend.appendChild(item);
-    });
-  }
-
-  function populateSelect(filter = "") {
-    const select = document.getElementById('initials');
-    select.innerHTML = '';
-    buyers
-      .filter(b => b.toLowerCase().includes(filter.toLowerCase()))
-      .forEach(b => {
-        const option = document.createElement('option');
-        option.value = b;
-        option.textContent = b;
-        select.appendChild(option);
-      });
-  }
-
-  function openModal() {
-    document.getElementById('modal').style.display = 'flex';
-  }
-
-  function closeModal() {
-    document.getElementById('modal').style.display = 'none';
-  }
-
-  window.openAddModal = function(type) {
-    editingId = null;
-    currentType = type;
-    document.getElementById('typeDisplay').textContent = type;
-    document.getElementById('name').value = '';
-    document.getElementById('from').value = '';
-    document.getElementById('to').value = '';
-    document.getElementById('search').value = '';
-    populateSelect();
-    openModal();
-  }
-
-  window.saveEdit = async function() {
-    const name = document.getElementById('name').value;
-    const initials = document.getElementById('initials').value;
-    const from = document.getElementById('from').value;
-    const to = document.getElementById('to').value;
-
-    if (!name || !initials || !from || !to) return;
-
-    const event = {
-      title: `${name} (${initials})`,
-      start: from,
-      end: new Date(new Date(to).getTime() + 86400000).toISOString().split('T')[0],
-      color: buyerColors[initials],
-      extendedProps: { name, initials, type: currentType }
-    };
-
-    await saveEvent(event);
-    closeModal();
-  }
-
-  window.editEvent = function(id) {
-    const e = events.find(ev => ev.id === id);
-    if (!e) return;
-
-    document.getElementById('name').value = e.extendedProps.name;
-    document.getElementById('from').value = e.start;
-
-    const endDate = new Date(e.end);
-    endDate.setDate(endDate.getDate() - 1);
-    document.getElementById('to').value = endDate.toISOString().split('T')[0];
-
-    currentType = e.extendedProps.type;
-    document.getElementById('typeDisplay').textContent = currentType;
-    populateSelect();
-    document.getElementById('initials').value = e.extendedProps.initials;
-
-    editingId = id;
-    openModal();
-  }
-
-  window.deleteEventUI = function(id) {
-    deleteEvent(id);
-  }
-
-  function renderList(data) {
-    const list = document.getElementById('list');
-    list.innerHTML = '';
-
-    data.forEach(e => {
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${e.extendedProps.initials}</td>
-        <td>${e.extendedProps.name}</td>
-        <td>${e.start}</td>
-        <td>${e.end}</td>
-        <td>${e.extendedProps.type}</td>
-        <td>
-          <button onclick="editEvent('${e.id}')">Edytuj</button>
-          <button onclick="deleteEventUI('${e.id}')">Usuń</button>
-        </td>
-      `;
-      list.appendChild(row);
-    });
-  }
-
-  function renderCalendar(data) {
-    if (calendar) calendar.destroy();
-
-    calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
-      initialView: 'dayGridMonth',
-      locale: 'pl',
-      headerToolbar: {
-        left: 'prev,next today',
-        center: 'title',
-        right: ''
-      },
-      buttonText: {
-        today: 'Dziś',
-        prev: '◀',
-        next: '▶'
-      },
-      events: data,
-      eventClick: function(info) {
-        editEvent(info.event.id);
-      }
-    });
-
-    calendar.render();
-  }
-
-  function renderAll() {
-    const filtered = selectedBuyers.size > 0
-      ? events.filter(e => selectedBuyers.has(e.extendedProps.initials))
-      : events;
-
-    renderCalendar(filtered);
-    renderList(filtered);
-  }
-
-  // ✅ KLUCZOWA NAPRAWA: czekamy aż DOM się załaduje
-  window.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('modal').addEventListener('click', closeModal);
-
-    document.getElementById('search').addEventListener('input', e => {
-      populateSelect(e.target.value);
-    });
-
-    populateLegend();
-    loadEvents();
-  });
-</script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
   <style>
-    body { font-family: Arial; margin:20px }
-    .legend { display:flex; flex-wrap:wrap; gap:8px }
-    .legend-item { cursor:pointer; padding:4px 8px; border:1px solid #ccc }
-    .legend-item.active { border:2px solid black }
-    .legend-color { width:10px;height:10px;display:inline-block;margin-right:4px }
+    body {
+      font-family: 'Segoe UI', Arial;
+      margin: 20px;
+      background: #f7f9fc;
+    }
+
+    h2 { margin-bottom: 10px }
+
+    #calendar {
+      background: white;
+      padding: 10px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      margin-top: 10px;
+    }
+
+    .legend {
+      display:flex; flex-wrap:wrap; gap:10px; margin:10px 0;
+    }
+
+    .legend-item {
+      display:flex; align-items:center; gap:6px;
+      cursor:pointer; padding:6px 10px;
+      background:white; border-radius:8px;
+      border:2px solid transparent;
+      box-shadow:0 2px 6px rgba(0,0,0,0.08);
+    }
+
+    .legend-item.active { border-color:#000 }
+
+    .legend-color { width:12px;height:12px;border-radius:3px }
+
+    table {
+      width:100%; margin-top:20px;
+      border-collapse:collapse;
+      background:white;
+      border-radius:12px;
+      overflow:hidden;
+      box-shadow:0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    th, td { padding:10px; border-bottom:1px solid #eee }
+    th { background:#f1f5f9 }
+
+    button {
+      padding:6px 10px;
+      border:none;
+      border-radius:6px;
+      cursor:pointer;
+    }
+
+    .modal {
+      display:none; position:fixed; inset:0;
+      background:#0008;
+      justify-content:center; align-items:center;
+    }
+
+    .modal-content {
+      background:white;
+      padding:20px;
+      border-radius:12px;
+      display:flex; flex-direction:column; gap:10px;
+    }
   </style>
 </head>
 <body>
 
-<h2>Kalendarz</h2>
-<button onclick="openAddModal('Urlop')">+ Urlop</button>
-<button onclick="openAddModal('Delegacja')">+ Delegacja</button>
+<h2>Kalendarz Działu</h2>
+<button onclick="openAddModal('Urlop')">➕ Urlop</button>
+<button onclick="openAddModal('Delegacja')">➕ Delegacja</button>
 
 <div id="legend" class="legend"></div>
 <div id="calendar"></div>
 
-<table border="1" width="100%">
+<table>
 <thead><tr><th>Kupiec</th><th>Imię</th><th>Od</th><th>Do</th><th>Typ</th><th></th></tr></thead>
 <tbody id="list"></tbody>
 </table>
 
-<div id="modal" style="display:none;position:fixed;inset:0;background:#0008;justify-content:center;align-items:center">
-  <div style="background:white;padding:20px" onclick="event.stopPropagation()">
-    <input id="search" placeholder="szukaj"><br>
-    <select id="initials"></select><br>
-    <input id="name" placeholder="imię"><br>
-    <input type="date" id="from"><br>
-    <input type="date" id="to"><br>
+<div id="modal" class="modal">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <input id="search" placeholder="Szukaj...">
+    <select id="initials"></select>
+    <input id="name" placeholder="Imię">
+    <input type="date" id="from">
+    <input type="date" id="to">
     <div id="typeDisplay"></div>
     <button onclick="saveEdit()">Zapisz</button>
   </div>
 </div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyB0bw9c36xzPrxqbEWylowERdglr_NRx-c",
+  authDomain: "kalendarz-80bec.firebaseapp.com",
+  databaseURL: "https://kalendarz-80bec-default-rtdb.europe-west1.firebasedatabase.app",
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const buyers = ["AGMA","ANKO","BAFU","BEGO","DAGO","EWKO","IZSI","JAKA","JASZ","JEJA","JOKA","JOMA PAKO","JONO","KACI","KADR","KRSM","MABE","MAKA","MAPO","MASK","MASS","MISK","PAJA DONO","RABI","SAŁU","TOWO","WABU","WEKA","ZBMA","ZUWO MISK"];
+
+const palette = ['#60a5fa','#34d399','#fbbf24','#f87171','#a78bfa','#fb7185','#22d3ee','#c084fc','#4ade80','#facc15','#38bdf8','#f472b6'];
+const buyerColors = {};
+buyers.forEach((b,i)=> buyerColors[b]=palette[i%palette.length]);
+
+let events = [];
+let calendar;
+let editingId = null;
+let currentType = 'Urlop';
+let selectedBuyers = new Set();
+
+function listenEvents() {
+  db.ref('events').on('value', snapshot => {
+    const data = snapshot.val() || {};
+    events = Object.entries(data).map(([id, val]) => ({ id, ...val }));
+    renderAll();
+  });
+}
+
+async function saveEvent(event) {
+  if (editingId) {
+    await db.ref('events/' + editingId).set(event);
+  } else {
+    const newRef = db.ref('events').push();
+    await newRef.set(event);
+  }
+  editingId = null;
+}
+
+async function deleteEvent(id) {
+  await db.ref('events/' + id).remove();
+}
+
+function populateLegend() {
+  const legend = document.getElementById('legend');
+  legend.innerHTML = '';
+
+  buyers.forEach(b => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = `<div class="legend-color" style="background:${buyerColors[b]}"></div>${b}`;
+
+    item.onclick = () => {
+      selectedBuyers.has(b) ? selectedBuyers.delete(b) : selectedBuyers.add(b);
+      item.classList.toggle('active');
+      renderAll();
+    };
+
+    legend.appendChild(item);
+  });
+}
+
+function populateSelect(filter = "") {
+  const select = document.getElementById('initials');
+  select.innerHTML = '';
+  buyers
+    .filter(b => b.toLowerCase().includes(filter.toLowerCase()))
+    .forEach(b => {
+      const option = document.createElement('option');
+      option.value = b;
+      option.textContent = b;
+      select.appendChild(option);
+    });
+}
+
+function openModal() {
+  document.getElementById('modal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('modal').style.display = 'none';
+}
+
+function openAddModal(type) {
+  editingId = null;
+  currentType = type;
+  document.getElementById('typeDisplay').textContent = type;
+  document.getElementById('name').value = '';
+  document.getElementById('from').value = '';
+  document.getElementById('to').value = '';
+  document.getElementById('search').value = '';
+  populateSelect();
+  openModal();
+}
+
+async function saveEdit() {
+  const name = document.getElementById('name').value;
+  const initials = document.getElementById('initials').value;
+  const from = document.getElementById('from').value;
+  const to = document.getElementById('to').value;
+
+  if (!name || !initials || !from || !to) return;
+
+  const event = {
+    title: `${name} (${initials})`,
+    start: from,
+    end: new Date(new Date(to).getTime() + 86400000).toISOString().split('T')[0],
+    color: buyerColors[initials],
+    extendedProps: { name, initials, type: currentType }
+  };
+
+  await saveEvent(event);
+  closeModal();
+}
+
+function editEvent(id) {
+  const e = events.find(ev => ev.id === id);
+  if (!e) return;
+
+  document.getElementById('name').value = e.extendedProps.name;
+  document.getElementById('from').value = e.start;
+
+  const endDate = new Date(e.end);
+  endDate.setDate(endDate.getDate() - 1);
+  document.getElementById('to').value = endDate.toISOString().split('T')[0];
+
+  currentType = e.extendedProps.type;
+  document.getElementById('typeDisplay').textContent = currentType;
+  populateSelect();
+  document.getElementById('initials').value = e.extendedProps.initials;
+
+  editingId = id;
+  openModal();
+}
+
+function deleteEventUI(id) {
+  deleteEvent(id);
+}
+
+function renderList(data) {
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+
+  data.forEach(e => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${e.extendedProps.initials}</td>
+      <td>${e.extendedProps.name}</td>
+      <td>${e.start}</td>
+      <td>${e.end}</td>
+      <td>${e.extendedProps.type}</td>
+      <td>
+        <button onclick="editEvent('${e.id}')">Edytuj</button>
+        <button onclick="deleteEventUI('${e.id}')">Usuń</button>
+      </td>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function renderCalendar(data) {
+  if (calendar) calendar.destroy();
+
+  calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+    initialView: 'dayGridMonth',
+    locale: 'pl',
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: ''
+    },
+    buttonText: {
+      today: 'Dziś',
+      prev: '◀',
+      next: '▶'
+    },
+    events: data,
+    eventClick: function(info) {
+      editEvent(info.event.id);
+    }
+  });
+
+  calendar.render();
+}
+
+function renderAll() {
+  const filtered = selectedBuyers.size > 0
+    ? events.filter(e => selectedBuyers.has(e.extendedProps.initials))
+    : events;
+
+  renderCalendar(filtered);
+  renderList(filtered);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('modal').addEventListener('click', closeModal);
+
+  document.getElementById('search').addEventListener('input', e => {
+    populateSelect(e.target.value);
+  });
+
+  populateLegend();
+  listenEvents();
+});
+</script>
 
 </body>
 </html>
