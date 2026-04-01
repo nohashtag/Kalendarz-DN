@@ -15,8 +15,36 @@
   <style>
     body {
       font-family: 'Segoe UI', Arial;
-      margin: 20px;
+      margin: 0;
       background: #f7f9fc;
+      display:flex;
+      justify-content:center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1300px;
+      padding: 20px;
+      display:flex;
+      gap:20px;
+    }
+
+    .sidebar {
+      width:260px;
+      display:flex;
+      flex-direction:column;
+      gap:15px;
+    }
+
+    .card {
+      background:white;
+      border-radius:12px;
+      padding:15px;
+      box-shadow:0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    .main {
+      flex:1;
     }
 
     h2 { margin-bottom: 10px }
@@ -29,6 +57,7 @@
       margin-top: 10px;
       position: relative;
       z-index: 1;
+      max-width: 100%;
     }
 
     .legend {
@@ -98,8 +127,22 @@
   </style>
 </head>
 <body>
+<div class="container">
 
-<h2>Kalendarz Działu</h2>
+<div class="sidebar">
+  <div class="card">
+    <h3>📅 Wybór miesiąca</h3>
+    <input type="month" id="monthPicker">
+  </div>
+
+  <div class="card">
+    <h3>👥 Urlopy w tym tygodniu</h3>
+    <div id="weekStats">0 osób</div>
+  </div>
+</div>
+
+<div class="main">
+<h2>Kalendarz Kupców</h2>
 <button onclick="openAddModal('Urlop')">➕ Urlop</button>
 <button onclick="openAddModal('Delegacja')">➕ Delegacja</button>
 
@@ -110,6 +153,7 @@
 <thead><tr><th>Kupiec</th><th>Imię</th><th>Od</th><th>Do</th><th>Typ</th><th></th></tr></thead>
 <tbody id="list"></tbody>
 </table>
+</div>
 
 <div id="modal" class="modal">
   <div class="modal-content" onclick="event.stopPropagation()">
@@ -307,6 +351,15 @@ function renderCalendar(data) {
   });
 
   calendar.render();
+
+  const picker = document.getElementById('monthPicker');
+  if (picker && !picker._init) {
+    picker._init = true;
+    picker.addEventListener('change', () => {
+      const [year, month] = picker.value.split('-');
+      calendar.gotoDate(year + '-' + month + '-01');
+    });
+  }
 }
 
 function renderAll() {
@@ -316,6 +369,23 @@ function renderAll() {
 
   renderCalendar(filtered);
   renderList(filtered);
+  updateWeekStats(filtered);
+}
+
+function updateWeekStats(data) {
+  const now = new Date();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay());
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+  const active = data.filter(e => {
+    const start = new Date(e.start);
+    const end = new Date(e.end);
+    return start <= endOfWeek && end >= startOfWeek;
+  });
+
+  document.getElementById('weekStats').textContent = active.length + ' osób';
 }
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -336,5 +406,6 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+</div>
 </body>
 </html>
