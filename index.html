@@ -20,206 +20,209 @@
       projectId: "kalendarz-6d32c",
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
 
-    // ================== APP ==================
+  const buyers = ["AGMA","ANKO","BAFU","BEGO","DAGO","EWKO","IZSI","JAKA","JASZ","JEJA","JOKA","JOMA PAKO","JONO","KACI","KADR","KRSM","MABE","MAKA","MAPO","MASK","MASS","MISK","PAJA DONO","RABI","SAŁU","TOWO","WABU","WEKA","ZBMA","ZUWO MISK"];
 
-    const buyers = ["AGMA","ANKO","BAFU","BEGO","DAGO","EWKO","IZSI","JAKA","JASZ","JEJA","JOKA","JOMA PAKO","JONO","KACI","KADR","KRSM","MABE","MAKA","MAPO","MASK","MASS","MISK","PAJA DONO","RABI","SAŁU","TOWO","WABU","WEKA","ZBMA","ZUWO MISK"];
+  const palette = ['#60a5fa','#34d399','#fbbf24','#f87171','#a78bfa','#fb7185','#22d3ee','#c084fc','#4ade80','#facc15','#38bdf8','#f472b6'];
+  const buyerColors = {};
+  buyers.forEach((b,i)=> buyerColors[b]=palette[i%palette.length]);
 
-    const palette = ['#60a5fa','#34d399','#fbbf24','#f87171','#a78bfa','#fb7185','#22d3ee','#c084fc','#4ade80','#facc15','#38bdf8','#f472b6'];
-    const buyerColors = {};
-    buyers.forEach((b,i)=> buyerColors[b]=palette[i%palette.length]);
+  let events = [];
+  let calendar;
+  let editingId = null;
+  let currentType = 'Urlop';
+  let selectedBuyers = new Set();
 
-    let events = [];
-    let calendar;
-    let editingId = null;
-    let currentType = 'Urlop';
-    let selectedBuyers = new Set();
-
-    async function loadEvents() {
+  async function loadEvents() {
+    try {
       const snapshot = await getDocs(collection(db, "events"));
       events = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       renderAll();
+    } catch (e) {
+      console.error("Firebase error:", e);
     }
+  }
 
-    async function saveEvent(event) {
-      if (editingId) {
-        await updateDoc(doc(db, "events", editingId), event);
-      } else {
-        await addDoc(collection(db, "events"), event);
-      }
-      editingId = null;
-      loadEvents();
+  async function saveEvent(event) {
+    if (editingId) {
+      await updateDoc(doc(db, "events", editingId), event);
+    } else {
+      await addDoc(collection(db, "events"), event);
     }
+    editingId = null;
+    loadEvents();
+  }
 
-    async function deleteEvent(id) {
-      await deleteDoc(doc(db, "events", id));
-      loadEvents();
-    }
+  async function deleteEvent(id) {
+    await deleteDoc(doc(db, "events", id));
+    loadEvents();
+  }
 
-    function populateLegend() {
-      const legend = document.getElementById('legend');
-      legend.innerHTML = '';
+  function populateLegend() {
+    const legend = document.getElementById('legend');
+    legend.innerHTML = '';
 
-      buyers.forEach(b => {
-        const item = document.createElement('div');
-        item.className = 'legend-item';
-        item.innerHTML = `<div class="legend-color" style="background:${buyerColors[b]}"></div>${b}`;
+    buyers.forEach(b => {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML = `<div class="legend-color" style="background:${buyerColors[b]}"></div>${b}`;
 
-        item.onclick = () => {
-          selectedBuyers.has(b) ? selectedBuyers.delete(b) : selectedBuyers.add(b);
-          item.classList.toggle('active');
-          renderAll();
-        };
-
-        legend.appendChild(item);
-      });
-    }
-
-    function populateSelect(filter = "") {
-      const select = document.getElementById('initials');
-      select.innerHTML = '';
-      buyers
-        .filter(b => b.toLowerCase().includes(filter.toLowerCase()))
-        .forEach(b => {
-          const option = document.createElement('option');
-          option.value = b;
-          option.textContent = b;
-          select.appendChild(option);
-        });
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('search').addEventListener('input', e => {
-        populateSelect(e.target.value);
-      });
-    });
-
-    function openModal() {
-      document.getElementById('modal').style.display = 'flex';
-    }
-
-    function closeModal() {
-      document.getElementById('modal').style.display = 'none';
-    }
-
-    document.getElementById('modal').addEventListener('click', closeModal);
-
-    window.openAddModal = function(type) {
-      editingId = null;
-      currentType = type;
-      document.getElementById('typeDisplay').textContent = type;
-      document.getElementById('name').value = '';
-      document.getElementById('from').value = '';
-      document.getElementById('to').value = '';
-      document.getElementById('search').value = '';
-      populateSelect();
-      openModal();
-    }
-
-    window.saveEdit = async function() {
-      const name = document.getElementById('name').value;
-      const initials = document.getElementById('initials').value;
-      const from = document.getElementById('from').value;
-      const to = document.getElementById('to').value;
-
-      if (!name || !initials || !from || !to) return;
-
-      const event = {
-        title: `${name} (${initials})`,
-        start: from,
-        end: new Date(new Date(to).getTime() + 86400000).toISOString().split('T')[0],
-        color: buyerColors[initials],
-        extendedProps: { name, initials, type: currentType }
+      item.onclick = () => {
+        selectedBuyers.has(b) ? selectedBuyers.delete(b) : selectedBuyers.add(b);
+        item.classList.toggle('active');
+        renderAll();
       };
 
-      await saveEvent(event);
-      closeModal();
-    }
+      legend.appendChild(item);
+    });
+  }
 
-    window.editEvent = function(id) {
-      const e = events.find(ev => ev.id === id);
-      if (!e) return;
-
-      document.getElementById('name').value = e.extendedProps.name;
-      document.getElementById('from').value = e.start;
-
-      const endDate = new Date(e.end);
-      endDate.setDate(endDate.getDate() - 1);
-      document.getElementById('to').value = endDate.toISOString().split('T')[0];
-
-      currentType = e.extendedProps.type;
-      document.getElementById('typeDisplay').textContent = currentType;
-      populateSelect();
-      document.getElementById('initials').value = e.extendedProps.initials;
-
-      editingId = id;
-      openModal();
-    }
-
-    window.deleteEventUI = function(id) {
-      deleteEvent(id);
-    }
-
-    function renderList(data) {
-      const list = document.getElementById('list');
-      list.innerHTML = '';
-
-      data.forEach(e => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${e.extendedProps.initials}</td>
-          <td>${e.extendedProps.name}</td>
-          <td>${e.start}</td>
-          <td>${e.end}</td>
-          <td>${e.extendedProps.type}</td>
-          <td>
-            <button onclick="editEvent('${e.id}')">Edytuj</button>
-            <button onclick="deleteEventUI('${e.id}')">Usuń</button>
-          </td>
-        `;
-        list.appendChild(row);
+  function populateSelect(filter = "") {
+    const select = document.getElementById('initials');
+    select.innerHTML = '';
+    buyers
+      .filter(b => b.toLowerCase().includes(filter.toLowerCase()))
+      .forEach(b => {
+        const option = document.createElement('option');
+        option.value = b;
+        option.textContent = b;
+        select.appendChild(option);
       });
-    }
+  }
 
-    function renderCalendar(data) {
-      if (calendar) calendar.destroy();
+  function openModal() {
+    document.getElementById('modal').style.display = 'flex';
+  }
 
-      calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
-        initialView: 'dayGridMonth',
-        locale: 'pl',
-        headerToolbar: {
-          left: 'prev,next today',
-          center: 'title',
-          right: ''
-        },
-        buttonText: {
-          today: 'Dziś',
-          prev: '◀',
-          next: '▶'
-        },
-        events: data,
-        eventClick: function(info) {
-          editEvent(info.event.id);
-        }
-      });
+  function closeModal() {
+    document.getElementById('modal').style.display = 'none';
+  }
 
-      calendar.render();
-    }
+  window.openAddModal = function(type) {
+    editingId = null;
+    currentType = type;
+    document.getElementById('typeDisplay').textContent = type;
+    document.getElementById('name').value = '';
+    document.getElementById('from').value = '';
+    document.getElementById('to').value = '';
+    document.getElementById('search').value = '';
+    populateSelect();
+    openModal();
+  }
 
-    function renderAll() {
-      const filtered = selectedBuyers.size > 0
-        ? events.filter(e => selectedBuyers.has(e.extendedProps.initials))
-        : events;
+  window.saveEdit = async function() {
+    const name = document.getElementById('name').value;
+    const initials = document.getElementById('initials').value;
+    const from = document.getElementById('from').value;
+    const to = document.getElementById('to').value;
 
-      renderCalendar(filtered);
-      renderList(filtered);
-    }
+    if (!name || !initials || !from || !to) return;
+
+    const event = {
+      title: `${name} (${initials})`,
+      start: from,
+      end: new Date(new Date(to).getTime() + 86400000).toISOString().split('T')[0],
+      color: buyerColors[initials],
+      extendedProps: { name, initials, type: currentType }
+    };
+
+    await saveEvent(event);
+    closeModal();
+  }
+
+  window.editEvent = function(id) {
+    const e = events.find(ev => ev.id === id);
+    if (!e) return;
+
+    document.getElementById('name').value = e.extendedProps.name;
+    document.getElementById('from').value = e.start;
+
+    const endDate = new Date(e.end);
+    endDate.setDate(endDate.getDate() - 1);
+    document.getElementById('to').value = endDate.toISOString().split('T')[0];
+
+    currentType = e.extendedProps.type;
+    document.getElementById('typeDisplay').textContent = currentType;
+    populateSelect();
+    document.getElementById('initials').value = e.extendedProps.initials;
+
+    editingId = id;
+    openModal();
+  }
+
+  window.deleteEventUI = function(id) {
+    deleteEvent(id);
+  }
+
+  function renderList(data) {
+    const list = document.getElementById('list');
+    list.innerHTML = '';
+
+    data.forEach(e => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${e.extendedProps.initials}</td>
+        <td>${e.extendedProps.name}</td>
+        <td>${e.start}</td>
+        <td>${e.end}</td>
+        <td>${e.extendedProps.type}</td>
+        <td>
+          <button onclick="editEvent('${e.id}')">Edytuj</button>
+          <button onclick="deleteEventUI('${e.id}')">Usuń</button>
+        </td>
+      `;
+      list.appendChild(row);
+    });
+  }
+
+  function renderCalendar(data) {
+    if (calendar) calendar.destroy();
+
+    calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+      initialView: 'dayGridMonth',
+      locale: 'pl',
+      headerToolbar: {
+        left: 'prev,next today',
+        center: 'title',
+        right: ''
+      },
+      buttonText: {
+        today: 'Dziś',
+        prev: '◀',
+        next: '▶'
+      },
+      events: data,
+      eventClick: function(info) {
+        editEvent(info.event.id);
+      }
+    });
+
+    calendar.render();
+  }
+
+  function renderAll() {
+    const filtered = selectedBuyers.size > 0
+      ? events.filter(e => selectedBuyers.has(e.extendedProps.initials))
+      : events;
+
+    renderCalendar(filtered);
+    renderList(filtered);
+  }
+
+  // ✅ KLUCZOWA NAPRAWA: czekamy aż DOM się załaduje
+  window.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('modal').addEventListener('click', closeModal);
+
+    document.getElementById('search').addEventListener('input', e => {
+      populateSelect(e.target.value);
+    });
 
     populateLegend();
     loadEvents();
-  </script>
+  });
+</script>
 
   <style>
     body { font-family: Arial; margin:20px }
