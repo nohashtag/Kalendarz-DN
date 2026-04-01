@@ -67,10 +67,16 @@
     }
 
     .modal {
-      display:none; position:fixed; inset:0;
-      background:#0008;
+      display:flex; position:fixed; inset:0;
+      background:rgba(0,0,0,0.45);
       justify-content:center; align-items:center;
       z-index: 9999;
+      opacity:0; pointer-events:none;
+      transition: opacity .2s ease;
+    }
+
+    .modal.show {
+      opacity:1; pointer-events:auto;
     }
 
     .modal-content {
@@ -78,6 +84,16 @@
       padding:20px;
       border-radius:12px;
       display:flex; flex-direction:column; gap:10px;
+      min-width:300px;
+      box-shadow:0 10px 25px rgba(0,0,0,0.2);
+      transform: translateY(20px) scale(0.95);
+      opacity:0;
+      transition: all .2s ease;
+    }
+
+    .modal.show .modal-content {
+      transform: translateY(0) scale(1);
+      opacity:1;
     }
   </style>
 </head>
@@ -184,11 +200,11 @@ function populateSelect(filter = "") {
 }
 
 function openModal() {
-  document.getElementById('modal').style.display = 'flex';
+  document.getElementById('modal').classList.add('show');
 }
 
 function closeModal() {
-  document.getElementById('modal').style.display = 'none';
+  document.getElementById('modal').classList.remove('show');
 }
 
 function openAddModal(type) {
@@ -303,7 +319,13 @@ function renderAll() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('modal').addEventListener('click', closeModal);
+  const modal = document.getElementById('modal');
+
+  modal.addEventListener('click', closeModal);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal();
+  });
 
   document.getElementById('search').addEventListener('input', e => {
     populateSelect(e.target.value);
