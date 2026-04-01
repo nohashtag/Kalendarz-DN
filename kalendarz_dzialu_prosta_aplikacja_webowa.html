@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Kalendarz Działu PRO</title>
+
+  <!-- FullCalendar (POPRAWNIE zamknięty) -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/locales-all.global.min.js"></script>
+
+  <style>
+    body { font-family: 'Segoe UI', Arial; margin: 20px; background:#f7f9fc; }
+    h2 { margin-bottom:15px; }
+
+    #calendar { max-width: 1100px; margin: auto; background:white; padding:10px; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.08);} 
+
+    .legend { display:flex; flex-wrap:wrap; gap:10px; margin:15px 0; }
+    .legend-item {
+      display:flex; align-items:center; gap:6px; font-size:13px;
+      background:white; padding:6px 10px; border-radius:8px;
+      box-shadow:0 2px 6px rgba(0,0,0,0.08);
+      cursor:pointer; border:2px solid transparent;
+    }
+    .legend-item.active { border-color:#111; }
+
+    .legend-color { width:12px; height:12px; border-radius:3px; }
+
+    table {
+      width:100%; border-collapse: collapse; margin-top:20px;
+      background:white; border-radius:12px; overflow:hidden;
+      box-shadow:0 4px 12px rgba(0,0,0,0.08);
+    }
+    th, td { padding:10px; border-bottom:1px solid #eee; }
+    th { background:#f1f5f9; }
+
+    button { padding:8px 12px; border:none; border-radius:6px; cursor:pointer; }
+    .btn-delete { background:#ef4444; color:white; }
+    .btn-edit { background:#22c55e; color:white; }
+
+    .add-btn { background:#4f46e5; color:white; margin-bottom:15px; }
+    .delegation-btn { background:#0ea5e9; color:white; margin-bottom:15px; margin-left:10px; }
+
+    .modal {
+      display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+      background:rgba(0,0,0,0.5); justify-content:center; align-items:center;
+      z-index: 9999;
+    }
+
+    .modal-content {
+      background:white; padding:20px; border-radius:12px; min-width:320px;
+      display:flex; flex-direction:column; gap:10px;
+    }
+
+    input, select { padding:8px; border-radius:6px; border:1px solid #ddd; }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen" style="position:fixed;inset:0;background:#111;display:flex;align-items:center;justify-content:center;z-index:99999;">
+  <div style="background:white;padding:30px;border-radius:12px;display:flex;flex-direction:column;gap:10px;min-width:250px;">
+    <h3 style="margin:0">Logowanie</h3>
+    <input type="password" id="passwordInput" placeholder="Hasło">
+    <button onclick="checkPassword()">Wejdź</button>
+  </div>
+</div>
+
+<h2>Kalendarz Działu</h2>
+
+<button onclick="openAddModal('Urlop')" class="add-btn">➕ Dodaj urlop</button>
+<button onclick="openAddModal('Delegacja')" class="delegation-btn">➕ Dodaj delegację</button>
+
+<div class="legend" id="legend"></div>
+
+<div id='calendar'></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Inicjały</th>
+      <th>Imię</th>
+      <th>Od</th>
+      <th>Do</th>
+      <th>Typ</th>
+      <th>Akcje</th>
+    </tr>
+  </thead>
+  <tbody id="list"></tbody>
+</table>
+
+<div class="modal" id="modal">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <input type="text" id="search" placeholder="Szukaj kupca...">
+    <select id="initials"></select>
+
+    <input type="text" id="name" placeholder="Imię">
+    <input type="date" id="from">
+    <input type="date" id="to">
+
+    <div id="typeDisplay" style="font-weight:600;"></div>
+
+    <button onclick="saveEdit()">Zapisz</button>
+  </div>
+</div>
+
+<script>
+// 🔐 LOGIN
+function checkPassword() {
+  const pass = document.getElementById('passwordInput').value;
+  const correctPassword = "1234";
+
+  if (pass === correctPassword) {
+    document.getElementById('loginScreen').style.display = 'none';
+  } else {
+    alert('Złe hasło');
+  }
+}
+
+// enter
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('passwordInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') checkPassword();
+  });
+});
+
+const buyers = ["AGMA","ANKO","BAFU","BEGO","DAGO","EWKO","IZSI","JAKA","JASZ","JEJA","JOKA","JOMA PAKO","JONO","KACI","KADR","KRSM","MABE","MAKA","MAPO","MASK","MASS","MISK","PAJA DONO","RABI","SAŁU","TOWO","WABU","WEKA","ZBMA","ZUWO MISK"];
+
+const palette = ['#60a5fa','#34d399','#fbbf24','#f87171','#a78bfa','#fb7185','#22d3ee','#c084fc','#4ade80','#facc15','#38bdf8','#f472b6'];
+
+const buyerColors = {};
+buyers.forEach((b,i)=> buyerColors[b]=palette[i%palette.length]);
+
+let selectedBuyers = new Set();
+let events = JSON.parse(localStorage.getItem('events') || '[]');
+let calendar;
+let editingId = null;
+let currentType = 'Urlop';
+
+function save() {
+  localStorage.setItem('events', JSON.stringify(events));
+}
+
+function populateLegend() {
+  const legend = document.getElementById('legend');
+  legend.innerHTML = '';
+
+  buyers.forEach(b => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = `<div class="legend-color" style="background:${buyerColors[b]}"></div>${b}`;
+
+    item.onclick = () => {
+      if (selectedBuyers.has(b)) {
+        selectedBuyers.delete(b);
+        item.classList.remove('active');
+      } else {
+        selectedBuyers.add(b);
+        item.classList.add('active');
+      }
+      renderAll();
+    };
+
+    legend.appendChild(item);
+  });
+}
+
+function populateSelect(filter = "") {
+  const select = document.getElementById('initials');
+  select.innerHTML = '';
+  buyers
+    .filter(b => b.toLowerCase().includes(filter.toLowerCase()))
+    .forEach(b => {
+      const option = document.createElement('option');
+      option.value = b;
+      option.textContent = b;
+      select.appendChild(option);
+    });
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('search').addEventListener('input', e => {
+    populateSelect(e.target.value);
+  });
+});
+
+function openModal() {
+  document.getElementById('modal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('modal').style.display = 'none';
+}
+
+document.getElementById('modal').addEventListener('click', closeModal);
+
+function openAddModal(type) {
+  editingId = null;
+  currentType = type;
+  document.getElementById('typeDisplay').textContent = type;
+  document.getElementById('name').value = '';
+  document.getElementById('from').value = '';
+  document.getElementById('to').value = '';
+  document.getElementById('search').value = '';
+  populateSelect();
+  openModal();
+}
+
+function saveEdit() {
+  const name = document.getElementById('name').value;
+  const initials = document.getElementById('initials').value;
+  const from = document.getElementById('from').value;
+  const to = document.getElementById('to').value;
+
+  if (!name || !initials || !from || !to) return;
+
+  const event = {
+    id: editingId || Date.now(),
+    title: `${name} (${initials})`,
+    start: from,
+    end: new Date(new Date(to).getTime() + 86400000).toISOString().split('T')[0],
+    color: buyerColors[initials],
+    extendedProps: { name, initials, type: currentType }
+  };
+
+  if (editingId) {
+    events = events.map(e => e.id === editingId ? event : e);
+  } else {
+    events.push(event);
+  }
+
+  editingId = null;
+  save();
+  renderAll();
+  closeModal();
+}
+
+function deleteEvent(id) {
+  events = events.filter(e => e.id !== id);
+  save();
+  renderAll();
+}
+
+function editEvent(id) {
+  const e = events.find(ev => ev.id === id);
+  if (!e) return;
+
+  document.getElementById('name').value = e.extendedProps.name;
+  document.getElementById('from').value = e.start;
+
+  const endDate = new Date(e.end);
+  endDate.setDate(endDate.getDate() - 1);
+  document.getElementById('to').value = endDate.toISOString().split('T')[0];
+
+  currentType = e.extendedProps.type;
+  document.getElementById('typeDisplay').textContent = currentType;
+  populateSelect();
+  document.getElementById('initials').value = e.extendedProps.initials;
+
+  editingId = id;
+  openModal();
+}
+
+function renderList(data) {
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+
+  data.forEach(e => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${e.extendedProps.initials}</td>
+      <td>${e.extendedProps.name}</td>
+      <td>${e.start}</td>
+      <td>${e.end}</td>
+      <td>${e.extendedProps.type}</td>
+      <td>
+        <button class="btn-edit">Edytuj</button>
+        <button class="btn-delete">Usuń</button>
+      </td>
+    `;
+
+    row.querySelector('.btn-edit').onclick = () => editEvent(e.id);
+    row.querySelector('.btn-delete').onclick = () => deleteEvent(e.id);
+
+    list.appendChild(row);
+  });
+}
+
+function renderCalendar(data) {
+  if (calendar) calendar.destroy();
+
+  calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+    initialView: 'dayGridMonth',
+    locale: 'pl',
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: ''
+    },
+    buttonText: {
+      today: 'Dziś',
+      prev: '◀',
+      next: '▶'
+    },
+    events: data,
+    eventClick: function(info) {
+      editEvent(info.event.id);
+    }
+  });
+
+  calendar.render();
+}
+
+function renderAll() {
+  const filtered = selectedBuyers.size > 0
+    ? events.filter(e => selectedBuyers.has(e.extendedProps.initials))
+    : events;
+
+  renderCalendar(filtered);
+  renderList(filtered);
+}
+
+populateLegend();
+renderAll();
+</script>
+
+</body>
+</html>
